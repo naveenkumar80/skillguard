@@ -85,7 +85,7 @@ Responsibilities:
 
 Suggested dependencies:
 
-- Node.js 20 LTS or newer supported LTS.
+- Node.js 22 LTS or newer supported LTS.
 - TypeScript strict mode.
 - `commander` for CLI parsing.
 - `zod` for runtime config validation.

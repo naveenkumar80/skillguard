@@ -163,30 +163,47 @@ SkillGuard findings map to standard SARIF 2.1.0 result levels:
   - `locations`: Physical location with relative URI (`uriBaseId: "%SRCROOT%"`) and 1-based line/column regions when known. Findings without specific file paths omit `locations`; findings without known line numbers omit `region`.
   - `properties`: Additional metadata including `category`, `confidence`, and `advisory`.
 
-### GitHub Actions Integration Example:
+### GitHub Actions Integration Example (Illustrative Phase 8 Target):
+
+> **Note:** Until SkillGuard packages are approved and published (Phase 10), run the built local CLI (`node packages/cli/dist/index.js`) from a locked source build rather than `npx skillguard`. Enabling SARIF upload requires explicit `security-events: write` permission and fork-safe gating (fork `pull_request` tokens are read-only and must not fail workflows on upload).
 
 ```yaml
 name: SkillGuard Assurance
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write # Required only if uploading SARIF on trusted branches
 
 jobs:
   assurance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
+          node-version: "22"
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
 
       - name: Run SkillGuard Scan
+        id: skillguard
         run: |
-          npx skillguard scan ./skills --format sarif > skillguard-results.sarif
-        continue-on-error: true
+          node packages/cli/dist/index.js scan ./skills --format sarif > skillguard-results.sarif
 
-      - name: Upload SARIF Report
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SARIF Report (non-fork events only)
+        if: always() && hashFiles('skillguard-results.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: skillguard-results.sarif
           category: skillguard-static-analysis

@@ -32,7 +32,7 @@ SkillGuard is an open-source assurance and static security CLI toolkit for AI Ag
 
 ### Prerequisites
 
-- **Node.js:** >= 20.18.0
+- **Node.js:** >= 22 (Node.js 22 LTS or newer; CI runs Node.js 22)
 - **pnpm:** >= 9.15.0
 - **Python:** >= 3.11 (with `uv` virtual environment for security engine)
 

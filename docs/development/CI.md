@@ -4,7 +4,7 @@
 
 `.github/workflows/ci.yml` runs the same job on `ubuntu-latest`, `windows-latest`,
 and `macos-latest`, using Node.js 22 and Python 3.11. It runs for pull requests,
-pushes to `main`, and manual dispatches. Jobs have a 20-minute timeout; a failing
+pushes to `master` (the repository default branch) and `main`, and manual dispatches. Jobs have a 20-minute timeout; a failing
 matrix entry does not cancel the others. New runs cancel obsolete runs on the
 same ref.
 
