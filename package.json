@@ -1,0 +1,26 @@
+{
+  "name": "skillguard-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "eslint . && uv run ruff check python",
+    "format": "prettier --write . && uv run ruff format python",
+    "format:check": "prettier --check . && uv run ruff format --check python",
+    "test": "vitest run && uv run pytest",
+    "typecheck": "pnpm -r typecheck && uv run mypy python",
+    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "eslint": "9.39.1",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.4",
+    "vitest": "3.2.4"
+  }
+}

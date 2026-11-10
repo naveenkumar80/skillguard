@@ -1,0 +1,23 @@
+{
+  "profile": "agent-skills-current",
+  "paths": ["./skills"],
+  "exclude": ["**/node_modules/**", "**/.git/**"],
+  "checks": {
+    "spec": true,
+    "structure": true,
+    "quality": false,
+    "security": true
+  },
+  "severityThreshold": "high",
+  "strict": false,
+  "engine": {
+    "enabled": true,
+    "timeoutMs": 15000
+  },
+  "aiEvaluation": {
+    "enabled": false,
+    "provider": null,
+    "model": null,
+    "maxCostUsd": 0
+  }
+}

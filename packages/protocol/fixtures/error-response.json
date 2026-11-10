@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "1.0",
+  "ok": false,
+  "findings": [],
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Request does not match protocol schema",
+    "retryable": false
+  }
+}

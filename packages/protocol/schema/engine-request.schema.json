@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:skill-assurance:engine-request:1.0",
+  "title": "Engine request v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "command", "files"],
+  "properties": {
+    "protocolVersion": { "const": "1.0" },
+    "command": { "enum": ["doctor", "scan", "evaluate"] },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "consent",
+        "provider",
+        "model",
+        "maxCostUsd",
+        "inputPricePerMillion",
+        "outputPricePerMillion",
+        "maxOutputTokens",
+        "maxInputBytes",
+        "timeoutMs",
+        "maxRetries"
+      ],
+      "properties": {
+        "enabled": { "const": true },
+        "consent": { "const": true },
+        "provider": { "const": "openai" },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+        },
+        "maxCostUsd": { "type": "number", "exclusiveMinimum": 0, "maximum": 5 },
+        "inputPricePerMillion": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000
+        },
+        "outputPricePerMillion": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000
+        },
+        "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "maxInputBytes": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "maxRetries": { "type": "integer", "minimum": 0, "maximum": 2 }
+      }
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content"],
+        "properties": {
+          "path": { "$ref": "urn:skill-assurance:finding:1.0#/$defs/path" },
+          "content": { "type": "string", "maxLength": 262144 }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "command": { "const": "doctor" } } },
+      "then": { "properties": { "files": { "type": "array", "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "command": { "const": "evaluate" } } },
+      "then": {
+        "properties": { "evaluation": true },
+        "required": ["evaluation"]
+      },
+      "else": { "properties": { "evaluation": false } }
+    }
+  ]
+}

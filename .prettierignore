@@ -1,0 +1,10 @@
+node_modules/
+.venv/
+**/dist/
+coverage/
+pnpm-lock.yaml
+uv.lock
+python/
+.git/
+# Adversarial fixture syntax and source locations are intentional.
+tests/fixtures/

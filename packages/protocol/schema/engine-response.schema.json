@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:skill-assurance:engine-response:1.0",
+  "title": "Engine response v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "ok", "findings"],
+  "properties": {
+    "protocolVersion": { "const": "1.0" },
+    "ok": { "type": "boolean" },
+    "findings": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "urn:skill-assurance:finding:1.0" }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "capabilities", "ruleSetVersion"],
+      "properties": {
+        "version": { "type": "string", "maxLength": 32 },
+        "capabilities": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["doctor", "scan", "evaluate"] }
+        },
+        "ruleSetVersion": { "type": ["string", "null"], "maxLength": 32 }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "model",
+        "promptVersion",
+        "advisory",
+        "estimatedCostUsd",
+        "attempts"
+      ],
+      "properties": {
+        "provider": { "const": "openai" },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+        },
+        "promptVersion": { "const": "1.0.0" },
+        "advisory": { "const": true },
+        "estimatedCostUsd": { "type": "number", "minimum": 0, "maximum": 5 },
+        "attempts": { "type": "integer", "minimum": 1, "maximum": 3 }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z_]+$", "maxLength": 64 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": { "ok": { "const": true }, "error": false, "engine": true },
+      "required": ["engine"]
+    },
+    {
+      "properties": {
+        "ok": { "const": false },
+        "findings": { "type": "array", "maxItems": 0 },
+        "engine": false,
+        "evaluation": false,
+        "error": true
+      },
+      "required": ["error"]
+    }
+  ]
+}

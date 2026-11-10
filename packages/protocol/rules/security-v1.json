@@ -1,0 +1,189 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "SG-SEC-001",
+      "version": "1.0.0",
+      "title": "GitHub token candidate",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "high",
+      "description": "A provider-shaped GitHub token candidate is present. This advisory pattern match does not establish that the credential is valid or active.",
+      "remediation": "Remove the credential from distributed content and history, rotate it if genuine, and use a secret manager or runtime environment reference.",
+      "references": [
+        "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github"
+      ]
+    },
+    {
+      "id": "SG-SEC-002",
+      "version": "1.0.0",
+      "title": "AWS access key identifier candidate",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "An AWS access key identifier shape is present. An identifier alone is not a complete credential and this advisory match does not establish validity.",
+      "remediation": "Remove genuine access key identifiers from distributed content, investigate companion credentials, and rotate exposed credentials using short-lived roles where possible.",
+      "references": [
+        "https://docs.aws.amazon.com/IAM/latest/UserGuide/securing_access-keys.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-003",
+      "version": "1.0.0",
+      "title": "Private key marker",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "A private key opening marker is present. This advisory match does not parse the key or establish that key material is complete or usable.",
+      "remediation": "Remove private key material from distributed content and history; revoke or rotate a genuine exposed key and store its replacement outside the skill.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Key_Management_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-004",
+      "version": "1.0.0",
+      "title": "Literal credential assignment candidate",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "A credential-named assignment contains a non-placeholder quoted literal. This advisory heuristic does not establish that the value is a real secret.",
+      "remediation": "Replace credential literals with secret-manager or runtime references, use clearly non-secret placeholders in examples, and rotate genuine exposed credentials.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-005",
+      "version": "1.0.0",
+      "title": "Credential-bearing database connection candidate",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "A database URI contains a literal username and password candidate. This advisory match does not connect to the database or validate credentials.",
+      "remediation": "Remove embedded database credentials, use runtime secret injection, and rotate genuine credentials that were exposed.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Database_Security_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-006",
+      "version": "1.0.0",
+      "title": "System instruction disclosure request",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "Text requests disclosure of system or developer instructions. This advisory language pattern is not proof of prompt injection or malicious intent.",
+      "remediation": "Remove disclosure requests from operational instructions and keep untrusted skill content subordinate to system and developer instructions.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-007",
+      "version": "1.0.0",
+      "title": "Environment exfiltration instruction",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "Text requests sending environment data to a remote destination. This advisory language pattern does not establish that any data was transmitted.",
+      "remediation": "Remove requests to transmit environment data; allow only explicitly approved, minimal, non-secret diagnostic fields and destinations.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-008",
+      "version": "1.0.0",
+      "title": "Permission or safety bypass instruction",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "Text requests bypassing permission, approval, or safety controls. This advisory language pattern is not proof of a successful bypass.",
+      "remediation": "Preserve permission and approval checks, use least privilege, and require explicit user approval for sensitive operations.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-009",
+      "version": "1.0.0",
+      "title": "Action concealment instruction",
+      "category": "security",
+      "defaultSeverity": "medium",
+      "confidence": "medium",
+      "description": "Text requests concealing actions from the user or operator. This advisory language pattern does not establish deceptive behavior.",
+      "remediation": "Remove concealment instructions and disclose sensitive actions, approvals, and results to the user with appropriate auditability.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-010",
+      "version": "1.0.0",
+      "title": "Remote download piped to a shell",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "high",
+      "description": "A download command is piped directly to a shell. This advisory syntax match does not execute the command or establish the safety of its source.",
+      "remediation": "Download without execution, inspect the artifact, verify a pinned digest or signature, and require explicit approval before running it.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-011",
+      "version": "1.0.0",
+      "title": "Broad destructive removal command",
+      "category": "security",
+      "defaultSeverity": "critical",
+      "confidence": "medium",
+      "description": "A forced recursive removal command targets a root or home location. This advisory syntax match does not establish that the command would run or succeed.",
+      "remediation": "Remove broad deletion commands; constrain cleanup to an explicitly validated workspace and require confirmation and a recoverable backup.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-012",
+      "version": "1.0.0",
+      "title": "Encoded execution pattern",
+      "category": "security",
+      "defaultSeverity": "high",
+      "confidence": "medium",
+      "description": "Text combines base64 decoding with an execution primitive. This advisory syntax match neither decodes nor executes the payload.",
+      "remediation": "Replace encoded execution with inspectable source, verify provenance, and require explicit approval before execution.",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "SG-SEC-013",
+      "version": "1.0.0",
+      "title": "Unpinned package installation indicator",
+      "category": "security",
+      "defaultSeverity": "medium",
+      "confidence": "high",
+      "description": "A supported pip or npm install command names a dependency without an exact version pin. This offline reproducibility indicator makes no vulnerability or CVE claim.",
+      "remediation": "Pin reviewed dependency versions and use a committed lockfile with integrity verification where supported; review updates through the normal dependency workflow.",
+      "references": [
+        "https://pip.pypa.io/en/stable/topics/secure-installs/",
+        "https://docs.npmjs.com/cli/configuring-npm/package-lock-json"
+      ]
+    },
+    {
+      "id": "SG-SEC-014",
+      "version": "1.0.0",
+      "title": "Unpinned dependency declaration indicator",
+      "category": "security",
+      "defaultSeverity": "medium",
+      "confidence": "high",
+      "description": "A supported package.json or requirements declaration lacks a recognized exact version pin. This offline reproducibility indicator makes no vulnerability or CVE claim and does not resolve dependencies or lockfiles.",
+      "remediation": "Use reviewed exact dependency versions and committed lockfiles with integrity verification where supported. Review remote sources explicitly; local references are not assessed as vulnerabilities.",
+      "references": [
+        "https://docs.npmjs.com/cli/configuring-npm/package-json",
+        "https://pip.pypa.io/en/stable/reference/requirements-file-format/"
+      ]
+    }
+  ]
+}

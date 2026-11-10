@@ -1,0 +1,12 @@
+{
+  "name": "@skillguard/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./schema/*": "./schema/*",
+    "./fixtures/*": "./fixtures/*",
+    "./rules/*": "./rules/*"
+  }
+}

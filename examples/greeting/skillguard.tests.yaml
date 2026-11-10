@@ -1,0 +1,37 @@
+# Hand-authored recorded fixtures, not generated agent responses.
+version: 1
+tests:
+  - id: greeting-text
+    group: smoke
+    skill: .
+    description: Check a recorded greeting with the five text assertions.
+    input:
+      prompt: Help me greet a new teammate.
+    output: "Hello, teammate! Welcome aboard."
+    assertions:
+      - type: contains
+        value: "Hello, teammate!"
+      - type: contains_any
+        values: ["Welcome", "Hello"]
+      - type: not_contains
+        value: "Goodbye"
+      - type: regex
+        value: '^Hello, teammate! Welcome aboard\.$'
+      - type: max_length
+        value: 40
+  - id: greeting-json
+    group: smoke
+    skill: .
+    description: Check a separate recorded structured fixture.
+    input:
+      prompt: Describe a greeting as JSON.
+    output:
+      greetings:
+        - message: "Hello, teammate!"
+          tone: welcoming
+    assertions:
+      - type: json_path_equals
+        path: $.greetings[0]
+        value:
+          message: "Hello, teammate!"
+          tone: welcoming

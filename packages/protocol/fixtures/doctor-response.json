@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "1.0",
+  "ok": true,
+  "findings": [],
+  "engine": {
+    "version": "0.1.0",
+    "capabilities": ["doctor", "scan", "evaluate"],
+    "ruleSetVersion": "1.0.0"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:skill-assurance:finding:1.0",
+  "title": "Finding v1.0",
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^\\\\:\\u0000-\\u001f]+$"
+    },
+    "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "category": {
+      "enum": [
+        "spec",
+        "structure",
+        "quality",
+        "security",
+        "test",
+        "ai-evaluation"
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "ruleId",
+    "title",
+    "category",
+    "severity",
+    "confidence",
+    "path",
+    "line",
+    "column",
+    "message",
+    "evidence",
+    "remediation",
+    "references"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "ruleId": { "type": "string", "pattern": "^SG-[A-Z]+-[0-9]{3}$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "category": { "$ref": "#/$defs/category" },
+    "severity": { "$ref": "#/$defs/severity" },
+    "confidence": { "$ref": "#/$defs/confidence" },
+    "path": { "$ref": "#/$defs/path" },
+    "line": { "type": "integer", "minimum": 1 },
+    "column": { "type": "integer", "minimum": 1 },
+    "message": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["redacted", "excerpt"],
+      "properties": {
+        "redacted": { "const": true },
+        "excerpt": { "type": "string", "maxLength": 256 }
+      }
+    },
+    "remediation": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "references": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "type": "string", "maxLength": 2048 }
+    }
+  }
+}

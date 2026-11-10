@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.skillguard/
+# Scan artifacts can contain sensitive information; implementation records are tracked.
+skillguard-report.*
+*.egg-info/

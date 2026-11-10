@@ -1,0 +1,1 @@
+A filename containing two dots is not a parent-directory component.
