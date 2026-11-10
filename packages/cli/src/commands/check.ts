@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import process from "node:process";
 import type { Command } from "commander";
 import { loadConfig } from "../config/config.js";
 import { check } from "../core/check.js";
@@ -6,6 +7,13 @@ import { scan } from "../core/scan.js";
 import { crossesThreshold, severities } from "../core/models.js";
 import type { Severity } from "../core/models.js";
 import { ScanError } from "../discovery/filesystem.js";
+import { EXIT_FINDINGS, EXIT_SUCCESS } from "../core/exit-codes.js";
+import {
+  formatCheckMarkdown,
+  formatCheckSarif,
+  formatCheckTerminal,
+  formatJson,
+} from "../reporting/index.js";
 
 export function registerCheck(
   program: Command,
@@ -24,7 +32,11 @@ export function registerCheck(
       "Explicit configuration file; paths resolve relative to this file",
     )
     .option("--python <executable>", "Trusted Python interpreter for scan only")
-    .option("--format <format>", "terminal or json", "terminal")
+    .option(
+      "--format <format>",
+      "terminal, json, markdown, or sarif",
+      "terminal",
+    )
     .option("--strict", "Fail on any deterministic finding")
     .option(
       "--severity-threshold <severity>",
@@ -32,7 +44,11 @@ export function registerCheck(
     )
     .option(
       "--quiet",
-      "Suppress terminal output; preserve machine-readable JSON",
+      "Suppress terminal output; preserve machine-readable JSON, Markdown, or SARIF",
+    )
+    .option(
+      "--verbose",
+      "Show detailed finding messages and remediation advice",
     )
     .option("--no-color", "Disable color (output is plain text by default)")
     .action(
@@ -45,32 +61,39 @@ export function registerCheck(
           strict?: boolean;
           severityThreshold?: string;
           quiet?: boolean;
+          verbose?: boolean;
         },
       ) => {
-        if (!["terminal", "json"].includes(options.format))
+        if (
+          !["terminal", "json", "markdown", "sarif"].includes(options.format)
+        ) {
           throw new ScanError(
             "INVALID_ARGUMENTS",
-            "Check --format must be terminal or json",
+            `${mode === "check" ? "Check" : "Scan"} --format must be terminal, json, markdown, or sarif`,
           );
+        }
         if (
           options.severityThreshold &&
           !severities.includes(options.severityThreshold as Severity)
-        )
+        ) {
           throw new ScanError(
             "INVALID_ARGUMENTS",
             "Select a valid severity threshold",
           );
+        }
         const { config, base } = await loadConfig(options.config);
         if (options.strict) config.strict = true;
-        if (options.severityThreshold)
+        if (options.severityThreshold) {
           config.severityThreshold = options.severityThreshold as Severity;
+        }
         const roots = path
           ? [resolve(path)]
           : config.paths.map((entry) => resolve(base, entry));
         const reports = [];
         for (const root of roots) {
-          if (signal?.aborted)
+          if (signal?.aborted) {
             throw new ScanError("CANCELLED", "Operation was cancelled");
+          }
           reports.push(
             mode === "check"
               ? (await check(root, config)).report
@@ -80,27 +103,18 @@ export function registerCheck(
                 }),
           );
         }
-        if (options.format === "json")
-          console.log(
-            JSON.stringify(
-              reports.length === 1 ? reports[0] : reports,
-              null,
-              2,
-            ),
-          );
-        else if (!options.quiet)
-          for (const report of reports) {
-            console.log(
-              `Skills: ${report.skills.length}; valid: ${report.skills.filter((skill) => skill.valid).length}; incomplete: ${!report.complete}`,
-            );
-            for (const finding of report.findings)
-              console.log(
-                `${finding.path}:${finding.line}:${finding.column} ${finding.severity} ${finding.ruleId} ${finding.title}`,
-              );
-            console.log(
-              "AI: disabled. No skill scripts executed. A clean check does not prove safety.",
-            );
-          }
+
+        if (options.format === "json") {
+          console.log(formatJson(reports.length === 1 ? reports[0] : reports));
+        } else if (options.format === "sarif") {
+          console.log(formatCheckSarif(reports));
+        } else if (options.format === "markdown") {
+          console.log(formatCheckMarkdown(reports));
+        } else {
+          const text = formatCheckTerminal(reports, options);
+          if (text) console.log(text);
+        }
+
         process.exitCode = reports.some(
           (report) =>
             !report.complete ||
@@ -110,8 +124,8 @@ export function registerCheck(
               config.strict,
             ),
         )
-          ? 1
-          : 0;
+          ? EXIT_FINDINGS
+          : EXIT_SUCCESS;
       },
     );
 }
