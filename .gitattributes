@@ -1,0 +1,42 @@
+# Normalize text files consistently to LF (matching .editorconfig and Prettier)
+* text=auto eol=lf
+
+# Explicit text classifications for repository sources, configs, docs, and lockfiles
+*.ts text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.txt text eol=lf
+*.sh text eol=lf
+
+# Windows batch scripts require CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Prevent line-ending conversion on binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.tar binary
+*.whl binary
+*.bin binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.wasm binary
+

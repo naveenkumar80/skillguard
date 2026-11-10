@@ -1,22 +1,15 @@
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config/config.js";
 import { allRules } from "../src/core/rules.js";
 import { scan } from "../src/core/scan.js";
 import { crossesThreshold } from "../src/core/models.js";
+import { resolveTestPython } from "./helpers/python.js";
 
 const roots: string[] = [];
-const executable = fileURLToPath(
-  new URL(
-    process.platform === "win32"
-      ? "../../../.venv/Scripts/python.exe"
-      : "../../../.venv/bin/python",
-    import.meta.url,
-  ),
-);
+const executable = resolveTestPython();
 const options = { executable };
 async function setup(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "skillguard-security-"));

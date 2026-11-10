@@ -29,8 +29,9 @@ import type { CheckResult } from "../src/core/check.js";
 import type { ScanResult } from "../src/core/scan.js";
 import type { TestRun } from "../testing/models.js";
 import type { DoctorStatus, EvaluateReport } from "../src/reporting/index.js";
+import { resolveTestPython } from "./helpers/python.js";
 
-const pythonExecutable = resolve(".venv/Scripts/python.exe");
+const pythonExecutable = resolveTestPython();
 
 describe("CLI program structure and command registration", () => {
   it("registers all required Phase 7 commands", () => {

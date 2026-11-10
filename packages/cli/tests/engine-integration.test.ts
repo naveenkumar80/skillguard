@@ -1,15 +1,8 @@
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { invokeEngine } from "../src/engine/client.js";
+import { resolveTestPython } from "./helpers/python.js";
 
-const executable = fileURLToPath(
-  new URL(
-    process.platform === "win32"
-      ? "../../../.venv/Scripts/python.exe"
-      : "../../../.venv/bin/python",
-    import.meta.url,
-  ),
-);
+const executable = resolveTestPython();
 describe("installed Python subprocess integration", () => {
   it("exchanges a real doctor request from a neutral cwd", async () => {
     const response = await invokeEngine(
