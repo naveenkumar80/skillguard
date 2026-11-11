@@ -7,6 +7,7 @@ import io
 import json
 import socket
 import ssl
+import threading
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -403,36 +404,155 @@ def test_nonretryable_failures_are_not_retried(failure: Exception) -> None:
     assert transport.complete.call_count == 1
 
 
+class _FakeClock:
+    """Thread-safe controllable monotonic clock for deterministic budget tests."""
+
+    def __init__(self, start: float = 100.0) -> None:
+        self._lock = threading.Lock()
+        self._now = start
+
+    def __call__(self) -> float:
+        with self._lock:
+            return self._now
+
+    def advance(self, seconds: float) -> float:
+        with self._lock:
+            self._now += seconds
+            return self._now
+
+
 def test_global_timeout_bounds_blocked_provider() -> None:
     transport = provider()
+    entered = threading.Event()
+    release = threading.Event()
+    returned = threading.Event()
 
     def block(**kwargs: Any) -> bytes:
-        time.sleep(0.15)
+        entered.set()
+        release.wait(timeout=5.0)
+        returned.set()
         return envelope()
 
     transport.complete.side_effect = block
     start = time.monotonic()
-    with pytest.raises(AIError) as error:
-        evaluate(request(timeoutMs=30, maxRetries=2), transport)
-    assert error.value.code == "AI_TIMEOUT"
-    assert time.monotonic() - start < 0.14
-    assert transport.complete.call_count == 1
+    try:
+        with pytest.raises(AIError) as error:
+            evaluate(request(timeoutMs=100, maxRetries=2), transport)
+        elapsed = time.monotonic() - start
+        assert error.value.code == "AI_TIMEOUT"
+        assert entered.is_set()
+        # Timeout must interrupt evaluation while the provider thread is still blocked.
+        assert not returned.is_set()
+        assert elapsed < 1.5
+        assert transport.complete.call_count == 1
+    finally:
+        release.set()
 
 
 def test_timeout_is_global_across_retries() -> None:
     transport = provider()
+    done = threading.Event()
+    deadlines: list[float] = []
 
-    def slow_failure(**kwargs: Any) -> bytes:
-        time.sleep(0.04)
+    def slow_failure(*, deadline: float, **kwargs: Any) -> bytes:
+        deadlines.append(deadline)
+        done.wait(0.11)
         raise AIError("AI_PROVIDER_ERROR", retryable=True)
 
     transport.complete.side_effect = slow_failure
     start = time.monotonic()
-    with pytest.raises(AIError) as error:
-        evaluate(request(timeoutMs=65, maxRetries=2), transport)
+    try:
+        with pytest.raises(AIError) as error:
+            evaluate(request(timeoutMs=180, maxRetries=2), transport)
+        elapsed = time.monotonic() - start
+        assert error.value.code == "AI_TIMEOUT"
+        assert elapsed < 1.5
+        assert 1 <= transport.complete.call_count <= 2
+        assert len(set(deadlines)) == 1
+    finally:
+        done.set()
+
+
+def test_blocked_retry_interrupted_without_running_remaining_retries() -> None:
+    transport = provider()
+    second_entered = threading.Event()
+    release = threading.Event()
+    second_returned = threading.Event()
+    deadlines: list[float] = []
+    attempts = 0
+
+    def fail_then_block(*, deadline: float, **kwargs: Any) -> bytes:
+        nonlocal attempts
+        attempts += 1
+        deadlines.append(deadline)
+        if attempts == 1:
+            raise AIError("AI_PROVIDER_ERROR", retryable=True)
+        second_entered.set()
+        release.wait(timeout=5.0)
+        second_returned.set()
+        return envelope()
+
+    transport.complete.side_effect = fail_then_block
+    start = time.monotonic()
+    try:
+        with pytest.raises(AIError) as error:
+            evaluate(request(timeoutMs=100, maxRetries=2), transport)
+        elapsed = time.monotonic() - start
+        assert error.value.code == "AI_TIMEOUT"
+        assert second_entered.is_set()
+        assert not second_returned.is_set()
+        assert elapsed < 1.5
+        assert transport.complete.call_count == 2
+        assert len(set(deadlines)) == 1
+    finally:
+        release.set()
+
+
+def test_retries_share_single_global_deadline_without_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _FakeClock()
+    transport = provider()
+    deadlines: list[float] = []
+    steps = iter((3.0, 2.5))
+
+    def fail_consuming_budget(*, deadline: float, **kwargs: Any) -> bytes:
+        deadlines.append(deadline)
+        clock.advance(next(steps))
+        raise AIError("AI_PROVIDER_ERROR", retryable=True)
+
+    transport.complete.side_effect = fail_consuming_budget
+    with monkeypatch.context() as mp:
+        mp.setattr(time, "monotonic", clock)
+        with pytest.raises(AIError) as error:
+            evaluate(request(timeoutMs=5000, maxRetries=2), transport)
     assert error.value.code == "AI_TIMEOUT"
-    assert time.monotonic() - start < 0.15
-    assert transport.complete.call_count <= 2
+    assert transport.complete.call_count == 2
+    assert deadlines == [105.0, 105.0]
+
+
+def test_retry_succeeds_within_remaining_global_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _FakeClock()
+    transport = provider()
+    deadlines: list[float] = []
+
+    def retry_then_succeed(*, deadline: float, **kwargs: Any) -> bytes:
+        deadlines.append(deadline)
+        if len(deadlines) == 1:
+            clock.advance(3.0)
+            raise AIError("AI_PROVIDER_ERROR", retryable=True)
+        clock.advance(1.0)
+        return envelope()
+
+    transport.complete.side_effect = retry_then_succeed
+    with monkeypatch.context() as mp:
+        mp.setattr(time, "monotonic", clock)
+        findings, metadata = evaluate(request(timeoutMs=5000, maxRetries=2), transport)
+    assert len(findings) == 1
+    assert metadata["attempts"] == 2
+    assert deadlines == [105.0, 105.0]
 
 
 def https_mock(
