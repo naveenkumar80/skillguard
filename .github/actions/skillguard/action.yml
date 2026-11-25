@@ -1,0 +1,434 @@
+name: "SkillGuard Security & Quality Action"
+description: "Run SkillGuard static security scanning, validation checks, and rule tests across Linux, macOS, and Windows."
+
+inputs:
+  command:
+    description: "SkillGuard command to execute (check, scan, or test). The AI evaluate command is intentionally disallowed."
+    required: false
+    default: "scan"
+  path:
+    description: "Target skill directory or file path inside the workspace."
+    required: false
+    default: ""
+  config:
+    description: "Optional path to a UTF-8 JSON skillguard.config.json configuration file (max 64 KiB)."
+    required: false
+    default: ""
+  severity-threshold:
+    description: "Minimum severity threshold (info, low, medium, high, critical) for check or scan."
+    required: false
+    default: ""
+  strict:
+    description: "Enable strict mode (true or false) for check or scan."
+    required: false
+    default: "false"
+  format:
+    description: "Output format (terminal, json, markdown, or sarif; test supports terminal, json, markdown)."
+    required: false
+    default: "terminal"
+  sarif-file:
+    description: "Optional workspace-relative path where validated SARIF 2.1.0 output is written."
+    required: false
+    default: ""
+  step-summary:
+    description: "Write a sanitized Markdown summary to GITHUB_STEP_SUMMARY (true or false)."
+    required: false
+    default: "true"
+  upload-sarif:
+    description: 'Reserved for separate trusted SARIF upload jobs; must remain "false" in this action step.'
+    required: false
+    default: "false"
+  quiet:
+    description: "Reduce secondary output noise (true or false)."
+    required: false
+    default: "false"
+  verbose:
+    description: "Include verbose diagnostics when supported (true or false)."
+    required: false
+    default: "false"
+  install-dependencies:
+    description: 'Dependency setup policy: "auto" (install only when missing), "true" (always install/build), or "false" (skip).'
+    required: false
+    default: "auto"
+  node-version:
+    description: "Node.js version to install when setup is required."
+    required: false
+    default: "22"
+  python-version:
+    description: "Python version to install when setup is required."
+    required: false
+    default: "3.11"
+
+outputs:
+  exit-code:
+    description: "Exit code returned by SkillGuard or input/artifact validation (0-4)."
+    value: ${{ steps.run.outputs.exit-code }}
+  sarif-file:
+    description: "Validated workspace-relative SARIF file path when written, or empty string."
+    value: ${{ steps.run.outputs.sarif-file }}
+  sarif-valid:
+    description: "Whether SARIF output was generated and passed schema validation (true or false)."
+    value: ${{ steps.run.outputs.sarif-valid }}
+  sarif-has-results:
+    description: "Whether validated SARIF output contains one or more results (true or false)."
+    value: ${{ steps.run.outputs.sarif-has-results }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check runtime and dependency state
+      id: prepare
+      shell: bash
+      env:
+        SKILLGUARD_ACTION_PATH: ${{ github.action_path }}
+        INPUT_INSTALL_DEPENDENCIES: ${{ inputs.install-dependencies }}
+        INPUT_NODE_VERSION: ${{ inputs.node-version }}
+        INPUT_PYTHON_VERSION: ${{ inputs.python-version }}
+      run: |
+        set -euo pipefail
+
+        mode="${INPUT_INSTALL_DEPENDENCIES:-auto}"
+        case "$mode" in
+          auto|true|false) ;;
+          *)
+            echo "INVALID_ARGUMENTS: Input \"install-dependencies\" must be \"auto\", \"true\", or \"false\"." >&2
+            exit 2
+            ;;
+        esac
+
+        split_semver() {
+          _rest="$1"
+          _p1="${_rest%%.*}"
+          if [ "$_p1" = "$_rest" ]; then
+            _p2=""
+            _p3=""
+            _extra=""
+            return 0
+          fi
+          _rest="${_rest#*.}"
+          _p2="${_rest%%.*}"
+          if [ "$_p2" = "$_rest" ]; then
+            _p3=""
+            _extra=""
+            return 0
+          fi
+          _rest="${_rest#*.}"
+          _p3="${_rest%%.*}"
+          if [ "$_p3" = "$_rest" ]; then
+            _extra=""
+          else
+            _extra="${_rest#*.}"
+          fi
+        }
+
+        validate_version_selector() {
+          case "$1" in
+            ""|*[!0-9.]*|.*|*.) return 1 ;;
+            *..*) return 1 ;;
+          esac
+          split_semver "$1"
+          [ -n "${_p1:-}" ] && [ -z "${_extra:-}" ]
+        }
+
+        version_matches() {
+          split_semver "${1#v}"
+          _a1="$_p1"; _a2="$_p2"; _a3="$_p3"
+          split_semver "$2"
+          _r1="$_p1"; _r2="$_p2"; _r3="$_p3"
+          [ "${_a1:-0}" -eq "${_r1:-0}" ] || return 1
+          if [ -n "${_r2:-}" ]; then
+            [ "${_a2:-0}" -eq "$_r2" ] || return 1
+          fi
+          if [ -n "${_r3:-}" ]; then
+            [ "${_a3:-0}" -eq "$_r3" ] || return 1
+          fi
+          return 0
+        }
+
+        req_node="${INPUT_NODE_VERSION:-22}"
+        req_python="${INPUT_PYTHON_VERSION:-3.11}"
+        if ! validate_version_selector "$req_node"; then
+          echo "INVALID_ARGUMENTS: Input \"node-version\" must be a numeric X[.Y[.Z]] version." >&2
+          exit 2
+        fi
+        if ! validate_version_selector "$req_python"; then
+          echo "INVALID_ARGUMENTS: Input \"python-version\" must be a numeric X[.Y[.Z]] version." >&2
+          exit 2
+        fi
+        split_semver "$req_node"
+        if [ "$_p1" -lt 22 ]; then
+          echo "INVALID_ARGUMENTS: Input \"node-version\" must be >= 22." >&2
+          exit 2
+        fi
+        split_semver "$req_python"
+        if [ "$_p1" -lt 3 ] || { [ "$_p1" -eq 3 ] && [ "${_p2:-0}" -lt 11 ]; }; then
+          echo "INVALID_ARGUMENTS: Input \"python-version\" must be >= 3.11." >&2
+          exit 2
+        fi
+
+        if [ ! -d "$SKILLGUARD_ACTION_PATH" ]; then
+          echo "ENGINE_UNAVAILABLE: SkillGuard action directory does not exist." >&2
+          exit 3
+        fi
+
+        action_root="$(cd "$SKILLGUARD_ACTION_PATH/../../.." && pwd)"
+        setup_node="false"
+        setup_python="false"
+        install_deps="false"
+
+        is_pinned_uv() {
+          ver="$("$1" --version 2>/dev/null || true)"
+          case "$ver" in
+            "uv 0.11.28"|"uv 0.11.28 "*) return 0 ;;
+            *) return 1 ;;
+          esac
+        }
+
+        has_pinned_uv() {
+          path_uv="$(command -v uv 2>/dev/null || true)"
+          if [ -n "$path_uv" ] && is_pinned_uv "$path_uv"; then
+            return 0
+          fi
+          uv_venv="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/skillguard-uv-0.11.28"
+          for cand in "$uv_venv/bin/uv" "$uv_venv/Scripts/uv.exe"; do
+            if [ -f "$cand" ] && is_pinned_uv "$cand"; then
+              return 0
+            fi
+          done
+          return 1
+        }
+
+        if [ "$mode" = "true" ]; then
+          setup_node="true"
+          setup_python="true"
+          install_deps="true"
+        elif [ "$mode" = "auto" ]; then
+          node_ok="false"
+          if command -v node >/dev/null 2>&1; then
+            node_ver="$(node -p 'process.versions.node' 2>/dev/null || true)"
+            if [ -n "$node_ver" ] && version_matches "$node_ver" "$req_node"; then
+              node_ok="true"
+            fi
+          fi
+          if [ "$node_ok" != "true" ]; then
+            setup_node="true"
+          fi
+
+          venv_ok="false"
+          for candidate in \
+            "$action_root/.venv/bin/python" \
+            "$action_root/.venv/Scripts/python.exe"; do
+            if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+              venv_ver="$("$candidate" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || true)"
+              if [ -n "$venv_ver" ] && version_matches "$venv_ver" "$req_python"; then
+                if "$candidate" -c 'import jsonschema, skillguard_engine' >/dev/null 2>&1; then
+                  venv_ok="true"
+                  break
+                fi
+              fi
+            fi
+          done
+
+          path_python_bin=""
+          for candidate in \
+            "$(command -v python3 2>/dev/null || true)" \
+            "$(command -v python 2>/dev/null || true)"; do
+            if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+              py_ver="$("$candidate" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || true)"
+              if [ -n "$py_ver" ] && version_matches "$py_ver" "$req_python"; then
+                path_python_bin="$candidate"
+                break
+              fi
+            fi
+          done
+
+          cli_ok="false"
+          node_deps_ok="false"
+          if [ -f "$action_root/packages/cli/dist/index.js" ] && [ -f "$action_root/packages/cli/dist/testing/regex-worker.mjs" ]; then
+            cli_ok="true"
+          fi
+          if [ -d "$action_root/node_modules" ] && \
+             [ -f "$action_root/packages/cli/node_modules/@skillguard/protocol/package.json" ] && \
+             [ -d "$action_root/packages/cli/node_modules/@skillguard/protocol/schema" ]; then
+            if command -v node >/dev/null 2>&1; then
+              if (cd "$action_root" && node -e 'const { createRequire } = require("node:module"); const { resolve } = require("node:path"); const req = createRequire(resolve("packages/cli/package.json")); for (const d of ["commander","zod","ajv","ajv-draft-04","ajv-formats","minimatch","markdown-it","yaml"]) req.resolve(d);' >/dev/null 2>&1); then
+                node_deps_ok="true"
+              fi
+            elif [ -f "$action_root/packages/cli/node_modules/commander/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/zod/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/ajv/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/ajv-draft-04/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/ajv-formats/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/minimatch/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/markdown-it/package.json" ] && \
+                 [ -f "$action_root/packages/cli/node_modules/yaml/package.json" ]; then
+              node_deps_ok="true"
+            fi
+          fi
+
+          if [ "$cli_ok" != "true" ] || [ "$node_deps_ok" != "true" ] || [ "$venv_ok" != "true" ]; then
+            install_deps="true"
+          fi
+
+          if [ "$venv_ok" != "true" ]; then
+            if [ -z "$path_python_bin" ]; then
+              setup_python="true"
+            elif ! has_pinned_uv && ! "$path_python_bin" -c 'import venv, ensurepip' >/dev/null 2>&1; then
+              setup_python="true"
+            fi
+          fi
+        fi
+
+        {
+          echo "action-root=$action_root"
+          echo "setup-node=$setup_node"
+          echo "setup-python=$setup_python"
+          echo "install-deps=$install_deps"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Setup Node.js
+      if: steps.prepare.outputs.setup-node == 'true'
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Setup Python
+      if: steps.prepare.outputs.setup-python == 'true'
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install SkillGuard dependencies and build CLI
+      if: steps.prepare.outputs.install-deps == 'true'
+      shell: bash
+      env:
+        SKILLGUARD_ACTION_ROOT: ${{ steps.prepare.outputs.action-root }}
+        INPUT_PYTHON_VERSION: ${{ inputs.python-version }}
+        UV_PYTHON_DOWNLOADS: never
+      run: |
+        set -euo pipefail
+        cd "$SKILLGUARD_ACTION_ROOT"
+
+        split_semver() {
+          _rest="$1"
+          _p1="${_rest%%.*}"
+          if [ "$_p1" = "$_rest" ]; then
+            _p2=""
+            _p3=""
+            return 0
+          fi
+          _rest="${_rest#*.}"
+          _p2="${_rest%%.*}"
+          if [ "$_p2" = "$_rest" ]; then
+            _p3=""
+            return 0
+          fi
+          _rest="${_rest#*.}"
+          _p3="${_rest%%.*}"
+        }
+
+        version_matches() {
+          split_semver "${1#v}"
+          _a1="$_p1"; _a2="$_p2"; _a3="$_p3"
+          split_semver "$2"
+          _r1="$_p1"; _r2="$_p2"; _r3="$_p3"
+          [ "${_a1:-0}" -eq "${_r1:-0}" ] || return 1
+          if [ -n "${_r2:-}" ]; then
+            [ "${_a2:-0}" -eq "$_r2" ] || return 1
+          fi
+          if [ -n "${_r3:-}" ]; then
+            [ "${_a3:-0}" -eq "$_r3" ] || return 1
+          fi
+          return 0
+        }
+
+        is_pinned_uv() {
+          ver="$("$1" --version 2>/dev/null || true)"
+          case "$ver" in
+            "uv 0.11.28"|"uv 0.11.28 "*) return 0 ;;
+            *) return 1 ;;
+          esac
+        }
+
+        req_python="${INPUT_PYTHON_VERSION:-3.11}"
+        python_bin=""
+        for candidate in \
+          "$(command -v python3 2>/dev/null || true)" \
+          "$(command -v python 2>/dev/null || true)"; do
+          if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+            py_ver="$("$candidate" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || true)"
+            if [ -n "$py_ver" ] && version_matches "$py_ver" "$req_python"; then
+              python_bin="$candidate"
+              break
+            fi
+          fi
+        done
+
+        if [ -z "$python_bin" ]; then
+          echo "ENGINE_UNAVAILABLE: Python matching ${req_python} is required to install SkillGuard engine dependencies." >&2
+          exit 3
+        fi
+
+        native_python="$("$python_bin" -c 'import sys; print(sys.executable)')"
+
+        uv_bin=""
+        path_uv="$(command -v uv 2>/dev/null || true)"
+        if [ -n "$path_uv" ] && is_pinned_uv "$path_uv"; then
+          uv_bin="$path_uv"
+        else
+          uv_venv="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/skillguard-uv-0.11.28"
+          for cand in "$uv_venv/bin/uv" "$uv_venv/Scripts/uv.exe"; do
+            if [ -f "$cand" ] && is_pinned_uv "$cand"; then
+              uv_bin="$cand"
+              break
+            fi
+          done
+          if [ -z "$uv_bin" ]; then
+            "$python_bin" -m venv --clear "$uv_venv"
+            uv_venv_py=""
+            for cand in "$uv_venv/bin/python" "$uv_venv/Scripts/python.exe"; do
+              if [ -f "$cand" ]; then
+                uv_venv_py="$cand"
+                break
+              fi
+            done
+            if [ -z "$uv_venv_py" ]; then
+              echo "ENGINE_UNAVAILABLE: Failed to initialize isolated uv bootstrap virtualenv." >&2
+              exit 3
+            fi
+            "$uv_venv_py" -m pip install --disable-pip-version-check "uv==0.11.28"
+            for cand in "$uv_venv/bin/uv" "$uv_venv/Scripts/uv.exe"; do
+              if [ -f "$cand" ] && is_pinned_uv "$cand"; then
+                uv_bin="$cand"
+                break
+              fi
+            done
+          fi
+        fi
+
+        if [ -z "$uv_bin" ] || ! is_pinned_uv "$uv_bin"; then
+          echo "ENGINE_UNAVAILABLE: Pinned uv==0.11.28 could not be verified." >&2
+          exit 3
+        fi
+
+        npx --yes pnpm@9.15.0 install --frozen-lockfile
+        UV_PYTHON="$native_python" "$uv_bin" sync --locked
+        npx --yes pnpm@9.15.0 build
+
+    - name: Run SkillGuard
+      id: run
+      shell: bash
+      env:
+        SKILLGUARD_ACTION_PATH: ${{ github.action_path }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+        INPUT_STEP_SUMMARY: ${{ inputs.step-summary }}
+        INPUT_UPLOAD_SARIF: ${{ inputs.upload-sarif }}
+        INPUT_QUIET: ${{ inputs.quiet }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+      run: node "$SKILLGUARD_ACTION_PATH/run.mjs"

@@ -1,0 +1,13 @@
+# Hand-authored recorded fixture for CI runner test failure verification.
+version: 1
+tests:
+  - id: failing-assertion
+    group: smoke
+    skill: .
+    description: Intentionally failing recorded assertion for action verification.
+    input:
+      prompt: Request test output.
+    output: "Actual recorded test output."
+    assertions:
+      - type: contains
+        value: "Deliberately non-matching assertion value"

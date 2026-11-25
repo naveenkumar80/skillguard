@@ -1,0 +1,110 @@
+# Example SkillGuard GitHub Actions Workflow
+#
+# Copy this file to your repository at:
+#   .github/workflows/skillguard.yml
+#
+# Security Model:
+# - Pull requests (both fork and same-repository PRs) execute strictly with
+#   read-only `contents: read` permissions and NEVER upload SARIF.
+# - Privileged SARIF upload (`security-events: write`) is isolated into a
+#   separate job that runs only on trusted pushes (or explicit manual runs)
+#   on the repository's default branch (`main` / `master`), and executes NO
+#   repository-controlled source checkout, build scripts, or dependencies.
+
+name: SkillGuard Security & Validation
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skillguard-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-skills:
+    name: Validate Agent Skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # 1. Specification and Reference Validation
+      # Verifies skill frontmatter, directory naming, and Markdown resource links.
+      # Note: `@master` is a mutable branch reference; pin to an immutable full
+      # commit SHA after your approved commit exists in the upstream repository.
+      - name: Validate skill specifications
+        id: skillguard-check
+        uses: naveenkumar80/skillguard/.github/actions/skillguard@master
+        with:
+          command: check
+          path: .
+          format: terminal
+          step-summary: true
+
+      # 2. Offline Static Security Scan
+      # Scans for prompt injection wording, command injection, and risky patterns.
+      # Fails if any high- or critical-severity finding is detected.
+      # Emits OASIS SARIF 2.1.0 validated output for optional trusted upload.
+      - name: Scan skill instructions for security risks
+        id: skillguard-scan
+        uses: naveenkumar80/skillguard/.github/actions/skillguard@master
+        with:
+          command: scan
+          path: .
+          format: sarif
+          sarif-file: skillguard-findings.sarif
+          severity-threshold: high
+          step-summary: true
+
+      # Only archive SARIF artifact on trusted default-branch push / manual runs.
+      - name: Upload validated SARIF artifact
+        if: >-
+          always() &&
+          steps.skillguard-scan.outputs.sarif-valid == 'true' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: skillguard-sarif-${{ github.run_id }}-${{ github.run_attempt }}
+          path: skillguard-findings.sarif
+          retention-days: 7
+          if-no-files-found: error
+
+  # Optional: Upload SARIF findings to GitHub Code Scanning (Security tab).
+  # Requires GitHub Advanced Security on private repos; free for public repos.
+  # Never executes on pull_request events and executes zero repository code.
+  upload-security-findings:
+    name: Upload SARIF to GitHub Code Scanning
+    needs: [validate-skills]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    if: >-
+      !cancelled() &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - name: Download validated SARIF artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: skillguard-sarif-${{ github.run_id }}-${{ github.run_attempt }}
+          path: sarif-upload
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: sarif-upload/skillguard-findings.sarif
+          category: skillguard

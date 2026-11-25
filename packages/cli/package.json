@@ -17,6 +17,8 @@
   "dependencies": {
     "@skillguard/protocol": "workspace:*",
     "ajv": "8.17.1",
+    "ajv-draft-04": "1.0.0",
+    "ajv-formats": "3.0.1",
     "commander": "12.1.0",
     "markdown-it": "15.0.3",
     "minimatch": "10.2.4",
