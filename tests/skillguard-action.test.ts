@@ -1546,6 +1546,22 @@ exit 0
         createStubReadyWorkspace(ws);
         writeFakeNodeAndPython(bin, { nodeVer: "22.14.0", pyVer: "3.11.9" });
 
+        if (process.platform !== "win32") {
+          const searchDirs = [
+            ...(process.env["PATH"] ?? "").split(":"),
+            "/bin",
+            "/usr/bin",
+          ].filter(Boolean);
+          for (const tool of ["mkdir", "cat", "chmod", "dirname"]) {
+            const hostDir = searchDirs.find((dir) =>
+              existsSync(join(dir, tool)),
+            );
+            if (hostDir) {
+              symlinkSync(join(hostDir, tool), join(bin, tool));
+            }
+          }
+        }
+
         writeExecutableScript(
           bin,
           "npx",
